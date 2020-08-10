@@ -1,5 +1,5 @@
     /*
-     * Some or all of this work - Copyright (c) 2006 - 2019, Intel Corp.
+     * Some or all of this work - Copyright (c) 2006 - 2020, Intel Corp.
      * All rights reserved.
      *
      * Redistribution and use in source and binary forms, with or without modification,
@@ -893,15 +893,15 @@
         CreateField (B000, 0x00, 0x08, BF00)
         CH03 (__METHOD__, Z058, __LINE__, 0x00, 0x00)
         Store (BF00 [0x00], Local5)
-        CH04 (__METHOD__, 0x01, 0x2F, Z058, __LINE__, 0x00, 0x00)   /* AE_AML_OPERAND_TYPE */
+        CH03 (__METHOD__, Z058, __LINE__, 0x00, 0x00)
         Local0 = BF00 [0x00]
-        CH04 (__METHOD__, 0x00, 0x2F, Z058, __LINE__, 0x00, 0x00)   /* AE_AML_OPERAND_TYPE */
+        CH03 (__METHOD__, Z058, __LINE__, 0x00, 0x00)
         Store (BF00 [0x00], Local0)
-        CH04 (__METHOD__, 0x00, 0xFF, Z058, __LINE__, 0x00, 0x00)
+        CH03 (__METHOD__, Z058, __LINE__, 0x00, 0x00)
         Store (BF00 [0x00], Local0)
-        CH04 (__METHOD__, 0x00, 0xFF, Z058, __LINE__, 0x00, 0x00)
+        CH03 (__METHOD__, Z058, __LINE__, 0x00, 0x00)
         Local1 = Local0 = BF00 [0x00]
-        CH04 (__METHOD__, 0x00, 0xFF, Z058, __LINE__, 0x00, 0x00)
+        CH03 (__METHOD__, Z058, __LINE__, 0x00, 0x00)
     }
 
     /* Bug 83 */
@@ -1074,7 +1074,7 @@
 
         CH03 (__METHOD__, Z058, __LINE__, 0x00, 0x00)
         /*
-         Discuss: now the ObjectType doesnt cause exception!
+         Discuss: now the ObjectType doesn't cause exception!
          Is it correct? Understand and discuss it.
          Store(ObjectType(i000), Local0)
          CH04(ts, 0, 46, z058, __LINE__, 0, 0)	// AE_AML_NO_OPERAND

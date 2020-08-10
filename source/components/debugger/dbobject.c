@@ -8,7 +8,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2019, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2020, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -649,7 +649,6 @@ AcpiDbDecodeArguments (
 
 
     Node = WalkState->MethodNode;
-    ObjDesc = WalkState->MethodDesc;
 
     /* There are no arguments for the module-level code case */
 

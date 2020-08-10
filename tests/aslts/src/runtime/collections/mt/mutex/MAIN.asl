@@ -1,5 +1,5 @@
 /*
- * Some or all of this work - Copyright (c) 2006 - 2019, Intel Corp.
+ * Some or all of this work - Copyright (c) 2006 - 2020, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -37,7 +37,7 @@ DefinitionBlock ("mt_mutex", "DSDT", 2, "Intel", "Many", 0x00000001)
     Include ("../../../../runtime/collections/mt/mutex/mutex.asl")
     Include ("../../../../runtime/collections/mt/mutex/mxs.asl")
     Include ("../../../../runtime/collections/mt/mutex/example0.asl")
-    Include ("../../../../runtime/collections/mt/mutex/slave_thr.asl")
+    Include ("../../../../runtime/collections/mt/mutex/worker_thr.asl")
     /*
      * Arguments passed to MAIN method are:
      *

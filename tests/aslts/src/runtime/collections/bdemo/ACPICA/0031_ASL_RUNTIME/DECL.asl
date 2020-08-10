@@ -1,5 +1,5 @@
     /*
-     * Some or all of this work - Copyright (c) 2006 - 2019, Intel Corp.
+     * Some or all of this work - Copyright (c) 2006 - 2020, Intel Corp.
      * All rights reserved.
      *
      * Redistribution and use in source and binary forms, with or without modification,
@@ -30,7 +30,7 @@
      *
      * SUMMARY: The ASL Compiler doesn't try to detect and reject attempts to use object before its declaration is evaluated
      *
-     * ASL-compiler doesnt result in Error
+     * ASL-compiler doesn't result in Error
      *
      * ATTENTION:
      *
@@ -41,7 +41,7 @@
      *         of it in other run-time tests.
      *
      * Note 2: Since the ability itself to tun this test is error
-     *         the test returns Error inconditionally (Method m1dc).
+     *         the test returns Error unconditionally (Method m1dc).
      *         But only one that error is expected. When the bug is
      *         fixed we will encounter that the test is no more
      *         compiled and fix it (see Note 1).

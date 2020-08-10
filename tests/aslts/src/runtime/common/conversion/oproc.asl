@@ -1,5 +1,5 @@
     /*
-     * Some or all of this work - Copyright (c) 2006 - 2019, Intel Corp.
+     * Some or all of this work - Copyright (c) 2006 - 2020, Intel Corp.
      * All rights reserved.
      *
      * Redistribution and use in source and binary forms, with or without modification,
@@ -783,7 +783,7 @@
         /*
          * //// ?????????????????????????
          * Uninitialized data should be passed to the operators immediately
-         * in the m480 but not here to these Store opreations!!!!!!!!!!!!!!
+         * in the m480 but not here to these Store operations!!!!!!!!!!!!!!
          * But this will a few complicate m480 !!!!!!!!!!!!!!!!!!!!!!!!!!!!
          * //// ?????????????????????????
          */

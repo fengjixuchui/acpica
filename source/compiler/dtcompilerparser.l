@@ -1,6 +1,7 @@
+%{
 /******************************************************************************
  *
- * Module Name: anmain - Main routine for the AcpiNames utility
+ * Module Name: dtcompilerparser.l - Flex input file for table compiler lexer
  *
  *****************************************************************************/
 
@@ -8,7 +9,7 @@
  *
  * 1. Copyright Notice
  *
- * Some or all of this work - Copyright (c) 1999 - 2019, Intel Corp.
+ * Some or all of this work - Copyright (c) 1999 - 2018, Intel Corp.
  * All rights reserved.
  *
  * 2. License
@@ -149,268 +150,144 @@
  *
  *****************************************************************************/
 
-#include "acpinames.h"
-#include "actables.h"
-#include "errno.h"
-
-#define _COMPONENT          ACPI_TOOLS
-        ACPI_MODULE_NAME    ("anmain")
+#include "aslcompiler.h"
+#include "dtcompilerparser.y.h"
 
 
-/* Local prototypes */
+#define _COMPONENT          ACPI_COMPILER
+        ACPI_MODULE_NAME    ("dtcompilerscanner")
 
-static int
-AnDumpEntireNamespace (
-    ACPI_NEW_TABLE_DESC     *ListHead);
+/* handle locations */
+
+int DtCompilerParsercolumn = 1;
+int DtLabelByteOffset = 0;
+int DtCompilerParserByteOffset = 0;
+
+UINT32 DtTokenFirstLine = 0;
+UINT32 DtTokenFirstColumn = 0;
+
+#define YY_USER_ACTION \
+            DtTokenFirstLine = DtCompilerParserlineno; \
+            DtTokenFirstColumn = DtCompilerParsercolumn; \
+            DtCompilerParsercolumn += DtCompilerParserleng; \
+            DtCompilerParserByteOffset += DtCompilerParserleng; \
+            DbgPrint (ASL_PARSE_OUTPUT,\
+                "user action occurred. DtCompilerParserlloc.first_line: %u\n",\
+                DtTokenFirstLine);
+%}
+
+%option nounput noinput yylineno
+
+    /* Indicates a state used for parsing multiline C comments */
+%x ML_COMMENT
+%x DATA_STATE
+
+WhiteSpace      [ \t\v\r]+
+NewLines        [\n]+
+
+    /* Avoid ", \n, and [] as a part of label name. These are not valid characters of a label name */
+LabelName       [^ ":\n\[\]]([^":\n\[\]]*[^" :\n\[\]])?
+
+    /* Avoid ", \n, \\, and [] as a part of data. These are not valid characters of data */
+Data            [^ \\":\n\[\]]([^":\n\[\]\\]*[^" :\n\[\]\\])?
+
+Text            [^ ":\n][^":\n]*
+Comment         \[[^\n\[\]]*\]
+CommentField    {LabelName}{WhiteSpace}*:{WhiteSpace}{Comment}?$
+
+
+%%
+
+<DATA_STATE>{WhiteSpace}"\\\n" {
+        DbgPrint(ASL_PARSE_OUTPUT,"Continuation matched\n");
+        return (DT_PARSEOP_LINE_CONTINUATION);
+    }
+
+":" {
+        DbgPrint(ASL_PARSE_OUTPUT, ": Matched\n");
+        BEGIN (DATA_STATE);
+        return (':');
+    }
+
+<INITIAL,DATA_STATE>{WhiteSpace} { DbgPrint(ASL_PARSE_OUTPUT,"Whitespace matched\n"); }
+
+<INITIAL,DATA_STATE>{Comment}    { DbgPrint(ASL_PARSE_OUTPUT,"Comment matched\n"); }
+
+"/*"                     { BEGIN (ML_COMMENT); }
+<ML_COMMENT>"*/"         { BEGIN (INITIAL); }
+<ML_COMMENT>"*/\n"       { BEGIN (INITIAL); }
+<ML_COMMENT>([^*]|\n)+|. /* Ignore */
+"//".*                   /* Ignore */
+
+
+<DATA_STATE>{Data} {
+      char *s;
+      int size = strlen (DtCompilerParsertext);
+      s=UtLocalCacheCalloc (size + 1);
+      AcpiUtSafeStrncpy (s, DtCompilerParsertext, size + 1);
+      DtCompilerParserlval.s = s;
+      DbgPrint (ASL_PARSE_OUTPUT, "Data: %s\n", s);
+      return (DT_PARSEOP_DATA);
+}
+
+{CommentField}  /* ignore */
+
+{LabelName} {
+    char *s;
+    int size = strlen (DtCompilerParsertext);
+    s=UtLocalCacheCalloc (size + 1);
+    AcpiUtSafeStrncpy (s, DtCompilerParsertext, size + 1);
+    DtCompilerParserlval.u = (DT_TABLE_UNIT *) UtLocalCacheCalloc (sizeof (DT_TABLE_UNIT));
+    DtCompilerParserlval.u->Value = s;
+    DtCompilerParserlval.u->Line = DtCompilerParserlineno;
+    DtCompilerParserlval.u->Column = DtCompilerParsercolumn;
+    DtLabelByteOffset = DtCompilerParserByteOffset;
+    DbgPrint (ASL_PARSE_OUTPUT, "Label: %s\n", s);
+    return (DT_PARSEOP_LABEL);
+}
+
+
+<DATA_STATE>\"{Text}?\" { // remove outer quotes from the string, they are unnecessary
+    char *s;
+    int size = strlen (DtCompilerParsertext);
+    s=UtLocalCacheCalloc (size - 1);
+    AcpiUtSafeStrncpy (s, DtCompilerParsertext + 1, size - 1);
+    DtCompilerParserlval.s = s;
+    DbgPrint (ASL_PARSE_OUTPUT, "String Data: %s\n", s);
+    BEGIN (INITIAL);
+    return (DT_PARSEOP_STRING_DATA);
+}
+
+
+<INITIAL,DATA_STATE>{NewLines} {
+    DbgPrint(ASL_PARSE_OUTPUT,
+        "Newline matched (data state). Current line number: %u\n",DtCompilerParserlineno);
+    BEGIN (INITIAL); DtCompilerParsercolumn = 1;
+}
+
+
+%%
 
 
 /*
- * Main routine for the ACPI user-space namespace utility.
- *
- * Portability note: The utility depends upon the host for command-line
- * wildcard support - it is not implemented locally. For example:
- *
- * Linux/Unix systems: Shell expands wildcards automatically.
- *
- * Windows: The setargv.obj module must be linked in to automatically
- * expand wildcards.
+ * Local support functions
  */
-BOOLEAN                     AcpiGbl_NsLoadOnly = FALSE;
 
+void
+DtCompilerInitLexer (
+    FILE                *inFile)
+{
+    yyin = inFile;
+}
 
-#define AN_UTILITY_NAME             "ACPI Namespace Dump Utility"
-#define AN_SUPPORTED_OPTIONS        "?hlv^x:"
-
-
-/******************************************************************************
- *
- * FUNCTION:    usage
- *
- * PARAMETERS:  None
- *
- * RETURN:      None
- *
- * DESCRIPTION: Print a usage message
- *
- *****************************************************************************/
-
-static void
-usage (
+void
+DtCompilerTerminateLexer (
     void)
 {
-
-    ACPI_USAGE_HEADER ("AcpiNames [options] AMLfile");
-    ACPI_OPTION ("-?",                  "Display this message");
-    ACPI_OPTION ("-l",                  "Load namespace only, no display");
-    ACPI_OPTION ("-v",                  "Display version information");
-    ACPI_OPTION ("-vd",                 "Display build date and time");
-    ACPI_OPTION ("-x <DebugLevel>",     "Debug output level");
-}
-
-
-/******************************************************************************
- *
- * FUNCTION:    main
- *
- * PARAMETERS:  argc, argv
- *
- * RETURN:      Status (pass/fail)
- *
- * DESCRIPTION: Main routine for NsDump utility
- *
- *****************************************************************************/
-
-int ACPI_SYSTEM_XFACE
-main (
-    int                     argc,
-    char                    **argv)
-{
-    ACPI_NEW_TABLE_DESC     *ListHead = NULL;
-    ACPI_STATUS             Status;
-    int                     j;
-
-
-    ACPI_DEBUG_INITIALIZE (); /* For debug version only */
-
-    /* Init debug globals and ACPICA */
-
-    AcpiDbgLevel = ACPI_NORMAL_DEFAULT | ACPI_LV_TABLES;
-    AcpiDbgLayer = 0xFFFFFFFF;
-
-    /* Set flags so that the interpreter is not used */
-
-    Status = AcpiInitializeSubsystem ();
-    ACPI_CHECK_OK (AcpiInitializeSubsystem, Status);
-    if (ACPI_FAILURE (Status))
-    {
-        return (-1);
-    }
-
-    printf (ACPI_COMMON_SIGNON (AN_UTILITY_NAME));
-    if (argc < 2)
-    {
-        usage ();
-        return (0);
-    }
-
-    /* Get the command line options */
-
-    while ((j = AcpiGetopt (argc, argv, AN_SUPPORTED_OPTIONS)) != ACPI_OPT_END) switch(j)
-    {
-    case 'l':
-
-        AcpiGbl_NsLoadOnly = TRUE;
-        break;
-
-    case 'v':
-
-        switch (AcpiGbl_Optarg[0])
-        {
-        case '^':  /* -v: (Version): signon already emitted, just exit */
-
-            exit (0);
-
-        case 'd':
-
-            printf (ACPI_COMMON_BUILD_TIME);
-            return (0);
-
-        default:
-
-            printf ("Unknown option: -v%s\n", AcpiGbl_Optarg);
-            return (-1);
-        }
-        break;
-
-    case 'x':
-
-        AcpiDbgLevel = strtoul (AcpiGbl_Optarg, NULL, 0);
-        printf ("Debug Level: 0x%8.8X\n", AcpiDbgLevel);
-        break;
-
-    case '?':
-    case 'h':
-    default:
-
-        usage();
-        return (0);
-    }
-
-    /* Get each of the ACPI table files on the command line */
-
-    while (argv[AcpiGbl_Optind])
-    {
-        /* Get all ACPI AML tables in this file */
-
-        Status = AcGetAllTablesFromFile (argv[AcpiGbl_Optind],
-            ACPI_GET_ALL_TABLES, &ListHead);
-        if (ACPI_FAILURE (Status))
-        {
-            return (-1);
-        }
-
-        AcpiGbl_Optind++;
-    }
-
-    printf ("\n");
-
     /*
-     * The next argument is the filename for the DSDT or SSDT.
-     * Open the file, build namespace and dump it.
+     * Flex/Bison increments the lineno for the EOF so decrement by 1 to get
+     * the correct number of lines.
      */
-    return (AnDumpEntireNamespace (ListHead));
-}
-
-
-/******************************************************************************
- *
- * FUNCTION:    AnDumpEntireNamespace
- *
- * PARAMETERS:  AmlFilename         - Filename for DSDT or SSDT AML table
- *
- * RETURN:      Status (pass/fail)
- *
- * DESCRIPTION: Build an ACPI namespace for the input AML table, and dump the
- *              formatted namespace contents.
- *
- *****************************************************************************/
-
-static int
-AnDumpEntireNamespace (
-    ACPI_NEW_TABLE_DESC     *ListHead)
-{
-    ACPI_STATUS             Status;
-    ACPI_HANDLE             Handle;
-
-
-    /*
-     * Build a local XSDT with all tables. Normally, here is where the
-     * RSDP search is performed to find the ACPI tables
-     */
-    Status = AnBuildLocalTables (ListHead);
-    if (ACPI_FAILURE (Status))
-    {
-        return (-1);
-    }
-
-    /* Initialize table manager, get XSDT */
-
-    Status = AcpiInitializeTables (NULL, ACPI_MAX_INIT_TABLES, TRUE);
-    if (ACPI_FAILURE (Status))
-    {
-        printf ("**** Could not initialize ACPI table manager, %s\n",
-            AcpiFormatException (Status));
-        return (-1);
-    }
-
-    /* Build the namespace from the tables */
-
-    Status = AcpiLoadTables ();
-    if (Status == AE_CTRL_TERMINATE)
-    {
-        /* At least one table load failed -- terminate with error */
-
-        return (-1);
-    }
-
-    if (ACPI_FAILURE (Status))
-    {
-        printf ("**** While creating namespace, %s\n",
-            AcpiFormatException (Status));
-        return (-1);
-    }
-
-    if (AcpiGbl_NsLoadOnly)
-    {
-        printf ("**** Namespace successfully loaded\n");
-        return (0);
-    }
-
-    /*
-     * NOTE:
-     * We don't need to do any further ACPICA initialization, since we don't
-     * have any hardware, nor is the interpreter configured.
-     *
-     * Namely, we don't need these calls:
-     *  AcpiEnableSubsystem
-     *  AcpiInitializeObjects
-     */
-
-
-    /*
-     * Perform a namespace walk to dump the contents
-     */
-    AcpiOsPrintf ("\nACPI Namespace:\n");
-
-    AcpiNsDumpObjects (ACPI_TYPE_ANY, ACPI_DISPLAY_SUMMARY,
-        ACPI_UINT32_MAX, ACPI_OWNER_ID_MAX, AcpiGbl_RootNode);
-
-
-    /* Example: get a handle to the _GPE scope */
-
-    Status = AcpiGetHandle (NULL, "\\_GPE", &Handle);
-    ACPI_CHECK_OK (AcpiGetHandle, Status);
-
-    AcDeleteTableList (ListHead);
-    return (0);
+    AslGbl_CurrentLineNumber = DtCompilerParserlineno - 1;
+    AslGbl_InputByteCount = DtCompilerParserByteOffset;
 }

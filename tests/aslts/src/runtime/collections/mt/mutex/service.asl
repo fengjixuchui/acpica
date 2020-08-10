@@ -1,5 +1,5 @@
     /*
-     * Some or all of this work - Copyright (c) 2006 - 2019, Intel Corp.
+     * Some or all of this work - Copyright (c) 2006 - 2020, Intel Corp.
      * All rights reserved.
      *
      * Redistribution and use in source and binary forms, with or without modification,
@@ -176,7 +176,7 @@
             }
             Case (0x02)
             {
-                /* allow only for Slave Threads to report */
+                /* allow only for Worker Threads to report */
 
                 If (Arg0)
                 {
